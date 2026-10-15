@@ -4,16 +4,13 @@ import discord
 from discord.ext import commands
 import google.generativeai as genai
 
-# Logging setup for Render console
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s"
 )
 
-# Fetching environment variables
 DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 
-# Configure Gemini Model
 ai_model = None
 if GEMINI_API_KEY:
   try:
@@ -25,7 +22,6 @@ if GEMINI_API_KEY:
 else:
   logging.warning("GEMINI_API_KEY missing from environment variables.")
 
-# Discord Bot setup with Intents
 intents = discord.Intents.default()
 intents.message_content = True
 
@@ -39,31 +35,27 @@ async def on_ready():
 
 @bot.event
 async def on_message(message):
-  # Ignore self messages
-  if message.author == bot.user:
+  if message.author == bot.user or message.author.bot:
     return
 
-  # Respond when mentioned
   if bot.user.mentioned_in(message):
-    # Remove bot tag from prompt
     clean_prompt = message.content.replace(f"<@{bot.user.id}>", "").strip()
+    clean_prompt = clean_prompt.replace(f"<@!{bot.user.id}>", "").strip()
 
     if not clean_prompt:
       clean_prompt = "Hello!"
 
     if ai_model:
       try:
-        # Show typing indicator while generating response
         async with message.channel.typing():
           response = ai_model.generate_content(clean_prompt)
 
-        reply = (
-            response.text
-            if hasattr(response, "text") and response.text
-            else "No response generated."
-        )
+        reply = ""
+        if hasattr(response, "text") and response.text:
+          reply = response.text
+        else:
+          reply = "I could not generate a response for that prompt."
 
-        # Discord 2000 character limit protection (chunking)
         if len(reply) > 1900:
           chunks = [reply[i : i + 1900] for i in range(0, len(reply), 1900)]
           for chunk in chunks:
@@ -74,19 +66,16 @@ async def on_message(message):
       except Exception as err:
         logging.error(f"Error handling Gemini request: {err}")
         await message.channel.send(
-            f"An error occurred while generating response: {err}"
+            "An error occurred while processing your request."
         )
     else:
-      await message.channel.send(
-          "Gemini API key is not configured in Render environment variables."
-      )
+      await message.channel.send("Gemini API key is not configured in Render.")
 
   await bot.process_commands(message)
 
 
-# Entry point check
 if __name__ == "__main__":
   if not DISCORD_TOKEN:
-    logging.critical("DISCORD_TOKEN is missing! Bot cannot start.")
+    logging.critical("DISCORD_TOKEN is missing!")
   else:
     bot.run(DISCORD_TOKEN)
